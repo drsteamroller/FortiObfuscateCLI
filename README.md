@@ -20,10 +20,10 @@ py fobf.py <directory> [optional options]
 
 The specified directory must contain the following subdirectories corresponding to the file format of the files within:
 
-'configs' = place FortiGate configuration files
-'pcaps' = place pcap files
-'syslogs' = place syslog files
-'fedwalk' = place other files that need to be scrubbed
+'configs' = place FortiGate configuration files\
+'pcaps' = place pcap files\
+'syslogs' = place syslog files\
+'fedwalk' = place other files that need to be scrubbed\
 
 Any files in any other subdirectory (or at the top level) will be exempted from obfuscation.
 
