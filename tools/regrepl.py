@@ -63,8 +63,12 @@ class RegexRep:
                 matches = reg.findall(line)
                 if matches:
                     for match in matches:
-                        line = line.replace(match, rep)
-                    self.contents[n] = line.replace(match, rep)
+                        try:
+                            line = line.replace(match, rep)
+                        except TypeError:
+                            for el in match:
+                                line = line.replace(el, rep)
+                    self.contents[n] = line
 
         with open(self.dstfile, 'w') as df:
             df.writelines(self.contents)
