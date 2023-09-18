@@ -1,19 +1,18 @@
-# fortiobfuscate.py - Bringing it all together
+# fobf.py - Bringing it all together (CLI edition)
 # Author - Andrew McConnell
-# Date - 05/25/2023
+# Date - 09/12/2023
 
 import sys
 import os
 import re
 from binascii import hexlify, unhexlify
-import tkinter as tk
-import tkinter.ttk as ttk
 
 try:
     import tools.confsrb as conf
     import tools.fedwalk as fedwalk
     import tools.logscrub as log
     import tools.pcapsrb as pcap
+    import tools.regrepl as rr
 except ImportError as e:
     print(f"You must download the entire package from GitHub, and download all dependencies:\n {e}")
     sys.exit()
@@ -30,9 +29,6 @@ sysslash = '/'
 # Gotta love Windows
 if sys.platform == 'win32':
     sysslash = '\\'
-
-# list of lists containing 2 items -> [file_path, combobox]
-fp_combox_mapping = []
 
 def importMap(filename):
     lines = []
@@ -333,37 +329,6 @@ def fromPCAPFormat(ip_repl_mstr=ip_repl_mstr, p_ip_repl=pcap.ip_repl, mac_repl_m
             og_str = og_str.strip("b'\"")
             str_repl_mstr[og_str] = rep_str
 
-# Button Functions
-# GUI-based help output explaining what each combobox option is and what it does, and debug based help
-def help():
-    message_txt = "Explanation of the menu items:\n\
-        'config' = select this if the associated file is a Fortinet configuration file\n\
-        'syslog' = select this if the associated file is a syslog file (best if directly from FortiAnalyzer)\n\
-        'pcap' = select this if the file is a pcap file\n\
-        'fedwalk' = select this if the file is not best classified by the above options\n\
-        'exempt' = select this if you explicitly do not want to scrub this file\n\n\
-Option Buttons:\n\
-        'Preserve IPs' = Do not perform scrubbing of IPs\n\
-        'Preserve Strings' = Do not perform scrubbing of strings (usernames, device names, etc)\n\
-        'Scrub PCAP Payloads' = Scrubs the upper layer protocol payloads (some, not all)\n\
-        'Scrub Private IPs' = Replaces RFC-1918 IP addresses with a randomize /16 address\n\
-        'Aggressive Replacement' = Enables fedwalk to utilize regex to replace ip address patterns\n\n\
-The Submit button will perform the associated obfuscation operations on the files listed based on the selection and\n\
-with respect to the arguments chosen\n\n\
-To turn on Debug (detailed logs) mode: press <F12> when on the main screen of the program"
-
-    helpPopupWin = tk.Tk()
-    helpPopupWin.geometry("800x350")
-    helpPopupWin.title("GUI - Help")
-
-    helpBanner = ttk.Label(helpPopupWin, text="How to use FortiObfuscate", font=("San Francisco", 18))
-    helpBanner.grid(column=0, row=0)
-
-    message = ttk.Label(helpPopupWin, text = message_txt, font=("San Francisco", 12))
-    message.grid(column=0, row=1)
-
-    helpPopupWin.mainloop()
-
 # For when a map is imported
 def set_repl_dicts(ip_repl_mstr=ip_repl_mstr, str_repl_mstr=str_repl_mstr, mac_repl_mstr=mac_repl_mstr):
     log.ip_repl = ip_repl_mstr
@@ -399,7 +364,7 @@ def obf_on_submit(dirTree):
         debug_log = open("fortiobfuscate_debug.log", 'w')
 
     save_fedwalk_for_last = []
-    amount_of_files = len(fp_combox_mapping)
+    rr_ops = []
 
     for num, path in enumerate(dirTree):
         modified_fp = path.replace(og_workspace, mod_workspace)
@@ -417,6 +382,8 @@ def obf_on_submit(dirTree):
             print(f"[PCAP] - {path} obfuscated and written to {modified_fp}")
         elif f"{sysslash}fedwalk{sysslash}" in path:
             save_fedwalk_for_last.append((path, modified_fp))
+        elif f"{sysslash}rr{sysslash}" in path:
+            rr_ops.append((path, modified_fp))
         else:
             print(f"[EXEMPT] - {path} exempted and copied to {modified_fp}")
 
@@ -429,6 +396,12 @@ def obf_on_submit(dirTree):
         for num, (src, dst) in enumerate(save_fedwalk_for_last):
             fedwalk.mainloop(opflags, src, dst, debug_log)
             print(f"[FEDWALK] - {path} obfuscated and written to {modified_fp}")
+
+    if len(rr_ops) > 0:
+        for src, dst in rr_ops:
+            REGEX_REPLACER = rr.RegexRep(src, dst)
+            REGEX_REPLACER.openObfWrite()
+            print(f"[REGREPL] - {path} obfuscated and written to {modified_fp}")
     
     map_output = ""
 

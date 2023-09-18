@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Description - On the way
+# Description - Scrub syslog formatted files (<key>=<value> <key2>=<value2> etc)
 # Author: Andrew McConnell
 # Date:   04/04/2023
 

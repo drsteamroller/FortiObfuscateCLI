@@ -23,7 +23,7 @@ The specified directory must contain the following subdirectories corresponding 
 'configs' = place FortiGate configuration files\
 'pcaps' = place pcap files\
 'syslogs' = place syslog files\
-'fedwalk' = place other files that need to be scrubbed\
+'fedwalk' = place other files that need to be scrubbed
 
 Any files in any other subdirectory (or at the top level) will be exempted from obfuscation.
 
