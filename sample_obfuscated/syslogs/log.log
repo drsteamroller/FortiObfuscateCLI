@@ -1,2 +1,2 @@
-sys=log user="cpoZbLzHdaxvTkOiZZ" srcip=192.168.0.1 dstip=113.178.226.230 
-srcip=113.178.226.230 dstip=192.168.0.1 msg="message for cpoZbLzHdaxvTkOiZZ (You're stupid)" 
+sys=log user="sZUhvPEyihLBONNcId" srcip=192.168.0.1 dstip=163.111.123.200 
+srcip=163.111.123.200 dstip=192.168.0.1 msg="message for sZUhvPEyihLBONNcId (You're stupid)" 

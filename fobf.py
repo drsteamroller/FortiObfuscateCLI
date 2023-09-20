@@ -29,6 +29,10 @@ sysslash = '/'
 # Gotta love Windows
 if sys.platform == 'win32':
     sysslash = '\\'
+ordered_rr = False
+json_file = ".\\tools\\precons.json"
+generic_rep = False
+import_rr = {}
 
 def importMap(filename):
     lines = []
@@ -139,9 +143,11 @@ def getFiles(dirTree):
     return files
 
 def abbrevIP6(ip6):
-    # FULL quartet (ffff, abcd, ad0c, f001) -> do nothing
-    # LEADING ZEROES (00ff, 0f01, 0001) -> chop them off
-    # ALL ZEROES -> kill all and adjacent all zero quartets and replace with ::
+    """
+    FULL quartet (ffff, abcd, ad0c, f001) -> do nothing\\
+    LEADING ZEROES (00ff, 0f01, 0001) -> chop them off\\
+    ALL ZEROES -> kill all and adjacent all zero quartets and replace with ::
+    """
     reconst = ""
     addColon = True
     for quartet in ip6.split(':'):
@@ -369,7 +375,6 @@ def obf_on_submit(dirTree):
     for num, path in enumerate(dirTree):
         modified_fp = path.replace(og_workspace, mod_workspace)
 
-        print(path)
 
         if f"{sysslash}configs{sysslash}" in path:
             conf.mainLoop(opflags, path, modified_fp, debug_log)
@@ -382,13 +387,17 @@ def obf_on_submit(dirTree):
             print(f"[PCAP] - {path} obfuscated and written to {modified_fp}")
         elif f"{sysslash}fedwalk{sysslash}" in path:
             save_fedwalk_for_last.append((path, modified_fp))
+            continue
         elif f"{sysslash}rr{sysslash}" in path:
             rr_ops.append((path, modified_fp))
+            continue
         else:
             print(f"[EXEMPT] - {path} exempted and copied to {modified_fp}")
+            continue
 
         append_mstr_dicts()
         set_repl_dicts()
+
 
     if len(save_fedwalk_for_last) > 0:
         amount_of_files = len(save_fedwalk_for_last)
@@ -399,8 +408,15 @@ def obf_on_submit(dirTree):
 
     if len(rr_ops) > 0:
         for src, dst in rr_ops:
-            REGEX_REPLACER = rr.RegexRep(src, dst)
+            try:
+                REGEX_REPLACER = rr.RegexRep(src, dst, jsonFile=json_file, ordered=ordered_rr)
+            except FileNotFoundError:
+                print(f"[REGREPL] - {json_file} does not exist or the path is not correct,\
+                      please provide the correct file or use the default /tools/precons.json file instead")
+            if import_rr:
+                REGEX_REPLACER.loadRegex(import_rr)
             REGEX_REPLACER.openObfWrite()
+            print(REGEX_REPLACER)
             print(f"[REGREPL] - {path} obfuscated and written to {modified_fp}")
     
     map_output = ""
@@ -429,7 +445,14 @@ options = {"-pi, --preserve-ips":"Program scrambles routable IP(v4&6) addresses 
 			"-sPIP, --scramble-priv-ips":"Scramble private/non-routable IP addresses",\
 			"-sp, --scrub-payload":"Sanitize (some) payload in packet for pcaps",\
 			"-ns":"Non-standard ports used. By default pcapsrb.py assumes standard port usage, use this option if the pcap to be scrubbed uses non-standard ports",\
-			"-map=<MAPFILE>":"Take a map file output from any FFI program and input it into this program to utilize the same replacements"}
+			"-map=<MAPFILE>":"Take a map file output from any FFI program and input it into this program to utilize the same replacements",\
+            "\nThe following options assume you are using the Regex Replacer (rr path) folder": "\n----------------------------------------------------\n",\
+            "-ord":"Use if utilizing the 'rr' path. Makes it so order matters for regex replacement",\
+            "-js=<JSON-FILE>": "Use a different JSON file to import regex strings and replacements. Look at .\\tools\\precons.json as an example",\
+            "-gr": "Generic replacement, if you supply a regex statement and an empty replacement string, this flag will fill it with random characters",\
+            "-ir=\"[regex,rep],[regex2,rep2],...\"": "set -ir equal to a list of lists containing regex and replacements\
+                  (replacements can be empty). Ensure regex strings with backslash escapes are DOUBLE escaped \
+                    (this is converted within the program)"}
 
 # Take in directory from the CLI
 args = sys.argv
@@ -452,6 +475,53 @@ else:
                 importMap(a.split('=')[1])
             elif '-d' in a:
                 debug_mode = True
+            elif '-ord' in a:
+                ordered_rr = True
+            elif '-gr' in a:
+                generic_rep = True
+            elif '-ir=' in a:
+                rr_list = a.split('=')[1]
+                if rr_list:
+                    try:
+                        construct = []
+                        subl = []
+                        reg = ""
+                        rep = ""
+                        acom = False
+                        close = False
+                        for ch in rr_list:
+                            if ',' in ch:
+                                if close:
+                                    close = False
+                                    continue
+                                acom = True
+                                subl.append(reg)
+                                continue
+                            if ']' in ch:
+                                acom = False
+                                close = True
+                                subl.append(rep)
+                                construct.append(subl)
+                                continue
+                            if '[' in ch:
+                                reg = ""
+                                rep = ""
+                                subl = []
+                                continue
+                            if acom:
+                                rep += ch
+                                continue
+                            reg += ch
+                        for n, group in enumerate(construct):
+                            import_rr[str(n)] = group
+
+                    except:
+                        print("-ir list is not formatted correctly:\n\t-ir=\"[reg1,rep1],[reg2,rep2]...\"\n")
+                        x = input("Do you wish to continue?\n\t(y/N) > ")
+                        if 'y' not in x:
+                            sys.exit(0)
+            elif '-js=' in a:
+                json_file = a.split('=')[1]
             else:
                 opflags.append(a)
 
