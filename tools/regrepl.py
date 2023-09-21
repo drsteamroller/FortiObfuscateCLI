@@ -9,37 +9,66 @@ import random
 
 class RegexRep:
 
-    t = int( time.time() * 1000.0 )
-    random.seed( ((t & 0xff000000) >> 24) +
-             ((t & 0x00ff0000) >>  8) +
-             ((t & 0x0000ff00) <<  8) +
-             ((t & 0x000000ff) << 24))
-
     ordered = False
+    """
+    Ordered vs Unordered regex: Some regex supplied could overlap with other regex supplied, in which
+    case we would want to search for the most specific regex first, followed by the next specific, etc.
+
+    Unordered is when all the regex strings provided do not overlap or depend on one another (Default option)
+    """
+
+    # precons = unordered regex dict
     precons = {}
+    # ordered_regex = ordered regex list
     ordered_regex = []
 
+    # Source file to read from
     srcfile = ""
+    # Destination file to write changes to
     dstfile = ""
+    # Contents that are read in from srcfile
     contents = []
     generic_rep = False
+    """
+    Generic replace: If we specify generic_rep=True upon initialization, whenever we see an empty replacement string,
+    instead of replacing the matched string with a blank '' string, we utilize the generic replacement function
+    which replaces the matched string with a randomized string
+    """
 
     def unescape(self, teststr):
+        """
+        Replace '\\\\\\\\' from the read in regex strings to '\\\\'
+        could come from the json file or user statements
+        """
         return teststr.replace("\\".encode('unicode-escape').decode(), chr(92))
 
     def reescape(self, teststr):
+        """
+        Reverse of unescape, replaces '\\\\' with '\\\\\\\\' usually before writing to a json file
+        """
         return teststr.replace(chr(92), "\\".encode('unicode-escape').decode())
 
     def compile(self):
+        """
+        Compile the regex strings loaded into precons or ordered_regex with imported re module
+        """
+
+        compiled_regrep = []
+
         if self.ordered:
             for i, [reg, rep] in enumerate(self.ordered_regex):
-                self.ordered_regex[i] = [re.compile(reg), rep]
+                compiled_regrep[i] = [re.compile(reg), rep]
         else:
+            compiled_regrep = {}
             for k, v in self.precons.items():
-                self.precons[k] = [re.compile(v[0]), v[1]]
+                compiled_regrep[k] = [re.compile(v[0]), v[1]]
+        
+        return compiled_regrep
 
     def loadRegex(self, userSuppliedRegex={}):
-
+        """
+        Loads in regex&replacements post-initialization
+        """
         # expects {name:[regexstr, repstr]}, where repstr can be a blank string
         for k, v in userSuppliedRegex.items():
             if type(k) != str or type(v) != list:
@@ -52,7 +81,9 @@ class RegexRep:
                 self.precons[k] = [self.unescape(v[0]), v[1]]
             
     def writeRegex(self, jsonFile="precons.json"):
-        
+        """
+        Write the regex out to jsonfile utilizing the json dump method
+        """
         existingJSON = {}
         try:
             with open(jsonFile, 'r') as JF:
@@ -68,10 +99,17 @@ class RegexRep:
                 json.dump({"precons": self.precons}, JF, indent=4)
 
     def salt(self):
+        """
+        Rudimentary salt which returns a number to add to the genericReplace method
+        """
         return random.randint(2, 8)
 
-    # If the replacement is empty and we want to generic replace, do it
+    # For when the replacement is empty and we don't want to replace the match with an empty string
     def genericReplace(self, line, match):
+        """
+        This method takes the length of the match plus the returned salt value and generates a randomized string
+        to be utilized as a replacement
+        """
         gen = ""
         for i in range(len(match) + self.salt()):
             gen += chr(random.randint(65, 90) + (32 * random.randint(0, 1)))
@@ -79,19 +117,19 @@ class RegexRep:
         return gen
 
     def openObfWrite(self):
-
+        """
+        Opens and reads open(self.srcfile)'s contents into self.contents\\
+        Compiles loaded regex\\
+        Parses through each line in self.contents and searches for regex matches\\
+        If a match is found, replace it with the corresponding replacement string\\
+        When finished, write the modifications to open(self.dstfile)
+        """
         with open(self.srcfile, 'r') as sf:
             self.contents = sf.readlines()
 
-        self.compile()
-
         # To save ourselves from having to double the loop below, we can just reference the important parts
         # of unordered or ordered (precons or ordered_regex, resp.) regex data
-        parsed = []
-        if self.ordered:
-            parsed = self.ordered_regex
-        else:
-            parsed = self.precons.values()
+        parsed = self.compile()
 
         for n, line in enumerate(self.contents):
 
@@ -138,6 +176,14 @@ class RegexRep:
         jsonFile = Specify a file to read in regex and replacement from\\
         ordered = True if certain regex statements read in will overlap or depend on an order to be replaced in
         """
+
+        # Set the seed upon initialization
+        t = int( time.time() * 1000.0 )
+        random.seed( ((t & 0xff000000) >> 24) +
+                ((t & 0x00ff0000) >>  8) +
+                ((t & 0x0000ff00) <<  8) +
+                ((t & 0x000000ff) << 24))
+
         self.srcfile = src
         self.dstfile = dst
 
@@ -156,6 +202,9 @@ class RegexRep:
                 self.precons[pk] = [self.unescape(pv[0]), pv[1]]
 
     def __str__(self):
+        """
+        To string method to show the main parts of the class: ordered_regex or precons
+        """
         buildStr = ""
 
         buildStr += f"\nPreconstructed {'ordered' if self.ordered else 'unordered'} Regex Entries\n"

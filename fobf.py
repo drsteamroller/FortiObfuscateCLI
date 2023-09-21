@@ -30,7 +30,7 @@ sysslash = '/'
 if sys.platform == 'win32':
     sysslash = '\\'
 ordered_rr = False
-json_file = ".\\tools\\precons.json"
+json_file = f".{sysslash}tools{sysslash}precons.json"
 generic_rep = False
 import_rr = {}
 
@@ -49,7 +49,6 @@ def importMap(filename : str):
     imp_mac = False
     imp_str = False
 
-    
     for l in lines:
         if '>>>' in l:
             if 'IP' in l:
