@@ -1,2 +1,2 @@
-rep
-rep2
+reg
+reg2

@@ -57,11 +57,10 @@ class RegexRep:
 
         if self.ordered:
             for i, [reg, rep] in enumerate(self.ordered_regex):
-                compiled_regrep[i] = [re.compile(reg), rep]
+                compiled_regrep.append([re.compile(reg), rep])
         else:
-            compiled_regrep = {}
-            for k, v in self.precons.items():
-                compiled_regrep[k] = [re.compile(v[0]), v[1]]
+            for i, [k, v] in enumerate(self.precons.items()):
+                compiled_regrep.append([re.compile(v[0]), v[1]])
         
         return compiled_regrep
 
