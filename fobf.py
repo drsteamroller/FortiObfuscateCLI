@@ -410,6 +410,7 @@ def obf_on_submit(dirTree):
         debug_log = open("fortiobfuscate_debug.log", 'w')
 
     save_fedwalk_for_last = []
+    aggressive_fedwalk = []
     rr_ops = []
 
     for num, path in enumerate(dirTree):
@@ -418,12 +419,18 @@ def obf_on_submit(dirTree):
 
         if f"{sysslash}configs{sysslash}" in path:
             conf.mainLoop(opflags, path, modified_fp, debug_log)
+            if agg_fedwalk:
+                aggressive_fedwalk.append(path)
             print(f"[CONFIG] - {path} obfuscated and written to {modified_fp}")
         elif f"{sysslash}syslogs{sysslash}" in path:
             log.mainloop(opflags, path, modified_fp, debug_log)
+            if agg_fedwalk:
+                aggressive_fedwalk.append(path)
             print(f"[SYSLOG] - {path} obfuscated and written to {modified_fp}")
         elif f"{sysslash}pcaps{sysslash}" in path:
             pcap.mainloop(opflags, path, modified_fp, debug_log)
+            if agg_fedwalk:
+                aggressive_fedwalk.append(path)
             print(f"[PCAP] - {path} obfuscated and written to {modified_fp}")
         elif f"{sysslash}fedwalk{sysslash}" in path:
             save_fedwalk_for_last.append((path, modified_fp))
@@ -444,7 +451,12 @@ def obf_on_submit(dirTree):
 
         for num, (src, dst) in enumerate(save_fedwalk_for_last):
             fedwalk.mainloop(opflags, src, dst, debug_log)
-            print(f"[FEDWALK] - {path} obfuscated and written to {modified_fp}")
+            print(f"[FEDWALK] - {src} obfuscated and written to {dst}")
+
+    if agg_fedwalk and len(aggressive_fedwalk) > 0:
+        for src in aggressive_fedwalk:
+            fedwalk.mainloop(opflags, src, src, debug_log)
+            print(f"[FEDWALK] - Additional pass through on {src}, overwritten in place")
 
     if len(rr_ops) > 0:
         for src, dst in rr_ops:
@@ -457,8 +469,7 @@ def obf_on_submit(dirTree):
                 REGEX_REPLACER.loadRegex(import_rr)
             REGEX_REPLACER.openObfWrite()
             REGEX_REPLACER.writeRegex(jsonFile=json_file)
-            print(REGEX_REPLACER)
-            print(f"[REGREPL] - {path} obfuscated and written to {modified_fp}")
+            print(f"[REGREPL] - {src} obfuscated and written to {dst}")
     
     map_output = ""
 
@@ -487,6 +498,8 @@ options = {"-pi, --preserve-ips":"Program scrambles routable IP(v4&6) addresses 
 			"-sp, --scrub-payload":"Sanitize (some) payload in packet for pcaps",\
 			"-ns":"Non-standard ports used. By default pcapsrb.py assumes standard port usage, use this option if the pcap to be scrubbed uses non-standard ports",\
 			"-map=<MAPFILE>":"Take a map file output from any FFI program and input it into this program to utilize the same replacements",\
+            "-agg":"Enables a second runthrough with fedwalk of all programs in these directories: 'configs', 'syslogs', and 'pcaps'",\
+            "-d":"Enable debug mode\n",\
             "\nThe following options assume you are using the Regex Replacer (rr path) folder": "\n----------------------------------------------------\n",\
             "-ord":"Use if utilizing the 'rr' path. Makes it so order matters for regex replacement",\
             "-js=<JSON-FILE>": "Use a different JSON file to import regex strings and replacements. Look at .\\tools\\precons.json as an example",\
@@ -518,6 +531,8 @@ else:
                 debug_mode = True
             elif '-ord' in a:
                 ordered_rr = True
+            elif '-agg' in a:
+                agg_fedwalk = True
             elif '-gr' in a:
                 generic_rep = True
             elif '-ir=' in a:
