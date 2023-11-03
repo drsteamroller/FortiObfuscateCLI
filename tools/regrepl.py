@@ -22,6 +22,8 @@ class RegexRep:
     # ordered_regex = ordered regex list
     ordered_regex = []
 
+    consistent_replace = {}
+
     # Source file to read from
     srcfile = ""
     # Destination file to write changes to
@@ -33,7 +35,7 @@ class RegexRep:
     Generic replace: If we specify generic_rep=True upon initialization, whenever we see an empty replacement string,
     instead of replacing the matched string with a blank '' string, we utilize the generic replacement function
     which replaces the matched string with a randomized string
-    """
+    """        
 
     def unescape(self, teststr):
         """
@@ -109,10 +111,14 @@ class RegexRep:
         This method takes the length of the match plus the returned salt value and generates a randomized string
         to be utilized as a replacement
         """
+        if match in self.consistent_replace.keys():
+            return self.consistent_replace[match]
+
         gen = ""
         for i in range(len(match) + self.salt()):
             gen += chr(random.randint(65, 90) + (32 * random.randint(0, 1)))
 
+        self.consistent_replace[match] = gen
         return gen
 
     def openObfWrite(self):
@@ -137,7 +143,7 @@ class RegexRep:
                 if matches:
                     for match in matches:
                         try:
-                            if rep or not self.generic_rep:
+                            if len(rep)!=0 or not self.generic_rep:
                                 line = line.replace(match, rep)
                             else:
                                 gr = self.genericReplace(line, match)
@@ -165,7 +171,7 @@ class RegexRep:
         with open(self.dstfile, 'w') as df:
             df.writelines(self.contents)
 
-    def __init__(self, src, dst, jsonFile="precons.json", ordered=False):
+    def __init__(self, src, dst, jsonFile="precons.json", ordered=False, generic_replace=False):
         """
         Initializes a RegexRep class with required variables:\\
         src = file to be read in\\
@@ -185,6 +191,7 @@ class RegexRep:
 
         self.srcfile = src
         self.dstfile = dst
+        self.generic_rep = generic_replace
 
         jsonl = {}
         with open(jsonFile, 'r') as JF:
@@ -214,12 +221,19 @@ class RegexRep:
             for pk, pv in self.precons.items():
                 buildStr += f"\n{pk} : {pv}"
 
+        buildStr += "\nReplacement Mappings:\n"
+
+        for m, g in self.consistent_replace.items():
+            buildStr += f"{m} ---> {g}\n"
+
+
         return buildStr
 
 def test():
-    a = RegexRep()
-    a.loadRegex({"test": ["someregex", "somereplacement"]})
+    a = RegexRep(src="tstfile.txt")#, dst="tstfile_filtered.txt", generic_replace=True)
+    a.loadRegex({"test": ["someregex", ""]})
     a.writeRegex()
+    a.openObfWrite()
     print(a)
 
-# test()
+#test()

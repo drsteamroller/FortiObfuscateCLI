@@ -503,7 +503,7 @@ def obf_on_submit(dirTree):
     if len(rr_ops) > 0:
         for src, dst in rr_ops:
             try:
-                REGEX_REPLACER = rr.RegexRep(src, dst, jsonFile=json_file, ordered=ordered_rr)
+                REGEX_REPLACER = rr.RegexRep(src, dst, jsonFile=json_file, ordered=ordered_rr, generic_replace=generic_rep)
             except FileNotFoundError:
                 print(f"[REGREPL] - {json_file} does not exist or the path is not correct,\
                       please provide the correct file or use the default /tools/precons.json file instead")
