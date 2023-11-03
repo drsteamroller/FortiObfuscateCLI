@@ -364,37 +364,78 @@ def fromPCAPFormat(ip_repl_mstr=ip_repl_mstr, p_ip_repl=pcap.ip_repl, mac_repl_m
             og_str = og_str.strip("b'\"")
             str_repl_mstr[og_str] = rep_str
 
-def set_repl_dicts(ip_repl_mstr=ip_repl_mstr, str_repl_mstr=str_repl_mstr, mac_repl_mstr=mac_repl_mstr):
+# For when a map is imported
+def set_repl_dicts():
     """
     Set the individual program replacement dictionaries to the master dictionaries
     """
-    log.ip_repl = ip_repl_mstr
-    conf.ip_repl = ip_repl_mstr
-    fedwalk.ip_repl = ip_repl_mstr
 
-    log.str_repl = str_repl_mstr
-    conf.str_repl = str_repl_mstr
-    fedwalk.str_repl = str_repl_mstr
+    global ip_repl_mstr
+    global mac_repl_mstr
+    global str_repl_mstr
 
-    fedwalk.mac_repl = mac_repl_mstr
+    log.ip_repl |= ip_repl_mstr
+    conf.ip_repl |= ip_repl_mstr
+    fedwalk.ip_repl |= ip_repl_mstr
+
+    log.str_repl |= str_repl_mstr
+    conf.str_repl |= str_repl_mstr
+    fedwalk.str_repl |= str_repl_mstr
+
+    fedwalk.mac_repl |= mac_repl_mstr
 
     toPCAPFormat()
 
 # Grabs the replacement dicts from the sub-programs and appends them to the mstr dicts
-def append_mstr_dicts(ip_repl_mstr=ip_repl_mstr, str_repl_mstr=str_repl_mstr, mac_repl_mstr=mac_repl_mstr):
+def append_mstr_dicts():
     """
     Append new findings to our master dictionaries from the individual program dictionaries\\
     This is done after the obfuscation function is performed on a file
     """
-    ip_repl_mstr = log.ip_repl | ip_repl_mstr
-    ip_repl_mstr = conf.ip_repl | ip_repl_mstr
-    ip_repl_mstr = fedwalk.ip_repl | ip_repl_mstr
-    str_repl_mstr = log.str_repl | str_repl_mstr
-    str_repl_mstr = conf.str_repl | str_repl_mstr
-    str_repl_mstr = fedwalk.str_repl | str_repl_mstr
-    mac_repl_mstr = fedwalk.mac_repl | mac_repl_mstr
+
+    global ip_repl_mstr
+    global mac_repl_mstr
+    global str_repl_mstr
+
+    if log.ip_repl:
+        ip_repl_mstr = ip_repl_mstr | log.ip_repl
+    if conf.ip_repl:
+        ip_repl_mstr = ip_repl_mstr | conf.ip_repl
+    if fedwalk.ip_repl:
+        ip_repl_mstr = ip_repl_mstr | fedwalk.ip_repl
+    if log.str_repl:
+        str_repl_mstr = str_repl_mstr | log.str_repl
+    if conf.str_repl:
+        str_repl_mstr = str_repl_mstr | conf.str_repl
+    if fedwalk.str_repl:
+        str_repl_mstr = str_repl_mstr | fedwalk.str_repl
+    if fedwalk.mac_repl:
+        mac_repl_mstr = mac_repl_mstr | fedwalk.mac_repl
 
     fromPCAPFormat()
+
+def print_mstr_dicts():
+
+    print("IP replacement master dict")
+    print(ip_repl_mstr)
+    print("STR replacement master dict")
+    print(str_repl_mstr)
+    print("MAC replacement master dict")
+    print(mac_repl_mstr)
+
+def print_child_proc_dicts():
+
+    print("Order is always: conf, syslog, pcap, fedwalk")
+    print("IP replacement child dicts")
+    print(conf.ip_repl)
+    print(log.ip_repl)
+    print(pcap.ip_repl)
+    print(fedwalk.ip_repl)
+    print("STR replacement child dicts")
+    print(conf.str_repl)
+    print(log.str_repl)
+    print(pcap.str_repl)
+    print(fedwalk.str_repl)
 
 def obf_on_submit(dirTree):    
     """
@@ -405,6 +446,7 @@ def obf_on_submit(dirTree):
     """
     debug_log = None
     global debug_mode
+    global agg_fedwalk
 
     if debug_mode:
         debug_log = open("fortiobfuscate_debug.log", 'w')
@@ -420,17 +462,17 @@ def obf_on_submit(dirTree):
         if f"{sysslash}configs{sysslash}" in path:
             conf.mainLoop(opflags, path, modified_fp, debug_log)
             if agg_fedwalk:
-                aggressive_fedwalk.append(path)
+                aggressive_fedwalk.append(modified_fp)
             print(f"[CONFIG] - {path} obfuscated and written to {modified_fp}")
         elif f"{sysslash}syslogs{sysslash}" in path:
             log.mainloop(opflags, path, modified_fp, debug_log)
             if agg_fedwalk:
-                aggressive_fedwalk.append(path)
+                aggressive_fedwalk.append(modified_fp)
             print(f"[SYSLOG] - {path} obfuscated and written to {modified_fp}")
         elif f"{sysslash}pcaps{sysslash}" in path:
             pcap.mainloop(opflags, path, modified_fp, debug_log)
             if agg_fedwalk:
-                aggressive_fedwalk.append(path)
+                aggressive_fedwalk.append(modified_fp)
             print(f"[PCAP] - {path} obfuscated and written to {modified_fp}")
         elif f"{sysslash}fedwalk{sysslash}" in path:
             save_fedwalk_for_last.append((path, modified_fp))

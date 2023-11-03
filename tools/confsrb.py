@@ -244,8 +244,11 @@ def obfuscate(conf):
     # Parse through the list containing the lines of the configuration file
     for i, content in enumerate(conf):
 
+        leading = ""
+
         # Record the number of leading spaces, so we aren't having awkward lines that aren't in-line
-        leading = " " * re.search('\S', content).start()
+        if (re.search('\S', content)):
+            leading = " " * re.search('\S', content).start()
         
         # If we see certain values containing potentially sensitive strings, replace them
         if ("set hostname" in content or "set alias" in content or "description" in content or 'set vdom' in content):
@@ -290,6 +293,10 @@ def obfuscate(conf):
                         if is_ip4.search(ip):
                             ip_o = g[b + 2]
                             ip_r = g[b + 2] = replace_ip4(ip)
+                
+                elif (len(g) == 2):
+                    a = is_ip4.search(g[1]).group()
+                    g[1] = g[1].replace(a, replace_ip4(a))
                 leading += " ".join(g)
             except IndexError:
                 debug_mes += f"[CONF] \\ERROR\\ configuration file is not formatted correctly, index out of bounds\n\tMalformed line {i}: \"{content}\"\n"
