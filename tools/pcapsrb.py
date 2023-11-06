@@ -22,6 +22,7 @@ import random
 import datetime
 import ipaddress
 import binascii
+import logging
 
 # Global Variables
 ip_repl = dict()
@@ -558,18 +559,22 @@ def mainloop(args: list, src_path: str, dst_path: str, debug_log):
 		f = open(src_path, 'rb')
 		debug_mes += f"[PCAP] Successfully opened file: {src_path}\n"
 	except:
-		out = f"[PCAP] File not found or something else went wrong, try full path or place pcapsrb.py & pcap in same path. File provided: \n\t{src_path}\n"
+		out = f"[PCAP] File not found or something else went wrong, try full path or place pcapsrb.py & pcap in same path. File provided: \n\t{src_path}"
 		print(out)
 		debug_mes += out
+		logging.critical(out)
 		sys.exit()
 
 	try:
 		pcap = dpkt.pcap.Reader(f)
 		debug_mes += f"[PCAP] {src_path} Successfully interpreted by dpkt Reader\n"
+		logging.info(f"[PCAP] {src_path} Successfully interpreted by dpkt Reader")
 	except:
 		out = f"[PCAP] {src_path} does not appear to be a pcap file\n"
 		print(out)
 		debug_mes += out
+		logging.critical(out)
+		sys.exit(1)
 
 	# Open a dpkt Writer pointing to an output file
 	f_mod = open(dst_path, 'wb')
@@ -586,6 +591,7 @@ def mainloop(args: list, src_path: str, dst_path: str, debug_log):
 			# unpack into (mac src/dst, ethertype)
 			eth = dpkt.ethernet.Ethernet(buf)
 			debug_mes += f"[PCAP] Unpacked Ethernet headers\n"
+			logging.debug(f"[PCAP] Unpacked Ethernet headers")
 
 			# Replace MAC addresses if not flagged
 			if("-pm" not in opflags and "--preserve-macs" not in opflags):
@@ -593,12 +599,16 @@ def mainloop(args: list, src_path: str, dst_path: str, debug_log):
 				eth.dst = replace_mac(eth.dst)
 				debug_mes += f"[PCAP] Replaced ethernet src + dst:\n\tSRC: {eth.src.hex()} -> {replace_mac(eth.src)}\n"
 				debug_mes += f"\tDST: {eth.dst.hex()} -> {replace_mac(eth.dst)}\n"
+				logging.debug(f"[PCAP] Replaced ethernet src + dst:\n\t\
+				  SRC: {eth.src.hex()} -> {replace_mac(eth.src)}\n\t\
+				  DST: {eth.dst.hex()} -> {replace_mac(eth.dst)}\n")
 
 			# Replace IP addresses if not flagged
 			if (isinstance(eth.data, dpkt.ip.IP) or isinstance(eth.data, dpkt.ip6.IP6)):
 				ip = eth.data
 
 				debug_mes += f"[PCAP] Unpacked IP headers\n"
+				logging.debug(f"[PCAP] Unpacked IP headers")
 
 				if("-pi" not in opflags and "--preserve-ips" not in opflags):
 					if (len(ip.src.hex()) == 8):
@@ -610,6 +620,7 @@ def mainloop(args: list, src_path: str, dst_path: str, debug_log):
 					else:
 						ip.dst = replace_ip6(ip.dst)
 					debug_mes += f"[PCAP] Replaced IP src + dst\n"
+					logging.debug(f"[PCAP] Replaced IP src + dst")
 
 				# Check for ICMP/v6. Currently testing to see what needs to be masked
 				if (isinstance(ip.data, dpkt.icmp.ICMP)):
@@ -687,16 +698,15 @@ def mainloop(args: list, src_path: str, dst_path: str, debug_log):
 							udp = ip.data
 							udp.data = scrub_upper_prots(udp.data, udp.sport, udp.dport)
 				except:
-					debug_mes += f"[PCAP] Packet at timestamp: {datetime.datetime.utcfromtimestamp(timestamp)} is of non IP Packet type, therefore unsupported (as of right now)"
+					debug_mes += f"[PCAP] Packet at timestamp: {datetime.datetime.utcfromtimestamp(timestamp)} is of non IP Packet type, therefore unsupported"
+					logging.debug(f"[PCAP] Packet at timestamp: {datetime.datetime.utcfromtimestamp(timestamp)} is of non IP Packet type, therefore unsupported")
 
 			# Write the modified (or unmodified, if not valid) packet
 			pcap_mod.writepkt(eth, ts=timestamp)
 
-			# each '.' means one packet read&written
-			# print(".", end='')
-
 		except Exception as e:
 			print(f"Exception thrown at timestamp {datetime.datetime.utcfromtimestamp(timestamp)}: {e}")
+			logging.error(f"[PCAP] Exception thrown at timestamp {datetime.datetime.utcfromtimestamp(timestamp)}: {e}\n\tWriting packet with no modifications")
 			pcap_mod.writepkt(eth, ts=timestamp)
 
 	f.close()

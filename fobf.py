@@ -5,6 +5,7 @@
 import sys
 import os
 import re
+import logging
 from binascii import hexlify, unhexlify
 
 try:
@@ -24,7 +25,13 @@ og_workspace = ""
 mod_workspace = ""
 opflags = []
 agg_fedwalk = False
+
 debug_mode = False
+# debug mode to be replaced: 
+log_fn = "fortiobfuscate_debug.log"
+log_lvl = logging.INFO
+log_frmt = '%(levelname)s: %(message)s'
+
 sysslash = '/'
 # Gotta love Windows
 if sys.platform == 'win32':
@@ -159,6 +166,7 @@ def getFiles(dirTree):
             files.extend([f'{dir}{slash}{i}' for i in next(os.walk(dir))[2]])
             if f'{dir}{slash}{args[0]}' in files:
                 print(f"\nERROR: You cannot perform fortiobfuscate on a directory containing itself\n\nexiting...\n")
+                logging.critical("You cannot perform fortiobfuscate on a directory containing itself")
                 sys.exit()
         except TypeError as e:
             print(f"Encountered {e} at directory {dir}")
@@ -437,6 +445,32 @@ def print_child_proc_dicts():
     print(pcap.str_repl)
     print(fedwalk.str_repl)
 
+def clear_non_fedwalk_repl_dicts():
+
+    del pcap.ip_repl
+    del pcap.str_repl
+    del pcap.mac_repl
+    
+    del log.ip_repl
+    del log.str_repl
+    
+    del conf.ip_repl
+    del conf.str_repl
+
+def sync_fedwalk_mstr_dicts():
+
+    global ip_repl_mstr
+    global mac_repl_mstr
+    global str_repl_mstr
+
+    ip_repl_mstr = ip_repl_mstr | fedwalk.ip_repl
+    str_repl_mstr = str_repl_mstr | fedwalk.str_repl
+    mac_repl_mstr = mac_repl_mstr | fedwalk.mac_repl
+
+    fedwalk.ip_repl |= ip_repl_mstr
+    fedwalk.str_repl |= str_repl_mstr
+    fedwalk.mac_repl |= mac_repl_mstr
+
 def obf_on_submit(dirTree):    
     """
     Main function of the program, takes the list of files from the TLD and walks through them,\\
@@ -444,33 +478,28 @@ def obf_on_submit(dirTree):
     
     Subdirectories: configs, syslogs, pcaps, fedwalk, rr
     """
-    debug_log = None
     global debug_mode
     global agg_fedwalk
-
-    if debug_mode:
-        debug_log = open("fortiobfuscate_debug.log", 'w')
 
     save_fedwalk_for_last = []
     aggressive_fedwalk = []
     rr_ops = []
 
     for num, path in enumerate(dirTree):
-        modified_fp = path.replace(og_workspace, mod_workspace)
-
+        modified_fp = path.replace(og_workspace, mod_workspace, 1)
 
         if f"{sysslash}configs{sysslash}" in path:
-            conf.mainLoop(opflags, path, modified_fp, debug_log)
+            conf.mainLoop(opflags, path, modified_fp)
             if agg_fedwalk:
                 aggressive_fedwalk.append(modified_fp)
             print(f"[CONFIG] - {path} obfuscated and written to {modified_fp}")
         elif f"{sysslash}syslogs{sysslash}" in path:
-            log.mainloop(opflags, path, modified_fp, debug_log)
+            log.mainloop(opflags, path, modified_fp)
             if agg_fedwalk:
                 aggressive_fedwalk.append(modified_fp)
             print(f"[SYSLOG] - {path} obfuscated and written to {modified_fp}")
         elif f"{sysslash}pcaps{sysslash}" in path:
-            pcap.mainloop(opflags, path, modified_fp, debug_log)
+            pcap.mainloop(opflags, path, modified_fp)
             if agg_fedwalk:
                 aggressive_fedwalk.append(modified_fp)
             print(f"[PCAP] - {path} obfuscated and written to {modified_fp}")
@@ -487,17 +516,18 @@ def obf_on_submit(dirTree):
         append_mstr_dicts()
         set_repl_dicts()
 
+    clear_non_fedwalk_repl_dicts()
 
     if len(save_fedwalk_for_last) > 0:
-        amount_of_files = len(save_fedwalk_for_last)
-
+        sync_fedwalk_mstr_dicts()
         for num, (src, dst) in enumerate(save_fedwalk_for_last):
-            fedwalk.mainloop(opflags, src, dst, debug_log)
+            fedwalk.mainloop(opflags, src, dst)
             print(f"[FEDWALK] - {src} obfuscated and written to {dst}")
 
     if agg_fedwalk and len(aggressive_fedwalk) > 0:
+        sync_fedwalk_mstr_dicts()
         for src in aggressive_fedwalk:
-            fedwalk.mainloop(opflags, src, src, debug_log)
+            fedwalk.mainloop(opflags, src, src)
             print(f"[FEDWALK] - Additional pass through on {src}, overwritten in place")
 
     if len(rr_ops) > 0:
@@ -506,6 +536,8 @@ def obf_on_submit(dirTree):
                 REGEX_REPLACER = rr.RegexRep(src, dst, jsonFile=json_file, ordered=ordered_rr, generic_replace=generic_rep)
             except FileNotFoundError:
                 print(f"[REGREPL] - {json_file} does not exist or the path is not correct,\
+                      please provide the correct file or use the default /tools/precons.json file instead")
+                logging.error(f"[REGREPL] - {json_file} does not exist or the path is not correct,\
                       please provide the correct file or use the default /tools/precons.json file instead")
             if import_rr:
                 REGEX_REPLACER.loadRegex(import_rr)
@@ -528,11 +560,6 @@ def obf_on_submit(dirTree):
     with open(f"mapof_{og_workspace}.txt", 'w') as mapfile_out:
         mapfile_out.write(map_output)
 
-    if debug_log:
-        debug_log.close()
-        debug_mode = False
-        print("Submit Process Finished, debug mode has been turned off\n")
-
 options = {"-pi, --preserve-ips":"Program scrambles routable IP(v4&6) addresses by default, use this option to preserve original IP addresses",\
 		   "-pm, --preserve-macs":"Disable MAC address scramble",\
 		   "-ps, --preserve-strings":"Disable sensitive string scramble",\
@@ -541,7 +568,7 @@ options = {"-pi, --preserve-ips":"Program scrambles routable IP(v4&6) addresses 
 			"-ns":"Non-standard ports used. By default pcapsrb.py assumes standard port usage, use this option if the pcap to be scrubbed uses non-standard ports",\
 			"-map=<MAPFILE>":"Take a map file output from any FFI program and input it into this program to utilize the same replacements",\
             "-agg":"Enables a second runthrough with fedwalk of all programs in these directories: 'configs', 'syslogs', and 'pcaps'",\
-            "-d":"Enable debug mode\n",\
+            "-d":"Enable debug logging\n",\
             "\nThe following options assume you are using the Regex Replacer (rr path) folder": "\n----------------------------------------------------\n",\
             "-ord":"Use if utilizing the 'rr' path. Makes it so order matters for regex replacement",\
             "-js=<JSON-FILE>": "Use a different JSON file to import regex strings and replacements. Look at .\\tools\\precons.json as an example",\
@@ -571,6 +598,7 @@ else:
                 importMap(a.split('=')[1])
             elif '-d' in a:
                 debug_mode = True
+                log_lvl = logging.DEBUG
             elif '-ord' in a:
                 ordered_rr = True
             elif '-agg' in a:
@@ -622,6 +650,9 @@ else:
                 json_file = a.split('=')[1]
             else:
                 opflags.append(a)
+
+    # Initialize logging with attrs
+    logging.basicConfig(filename=log_fn, filemode='w', level=log_lvl, format=log_frmt)
 
 # Build target directory for modified files in the backend
 mod_workspace, dirtree_of_workspace = buildDirTree(og_workspace)

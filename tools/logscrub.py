@@ -6,6 +6,7 @@
 import random
 import re
 import time
+import logging
 
 # GLOBAL VARS
 # Log content is a list of dictionaries if one log is supplied, and if multiple are supplied,
@@ -21,7 +22,6 @@ ip_repl = dict()
 syslogregex = re.compile(r'(.+?)=("[^"]*"|\S*)\s*')
 ip4 = re.compile(r'(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)[.](25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)[.](25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)[.](25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)')
 ip6 = re.compile(r"(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:)|fe80:(:[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}|::(ffff(:0{1,4}){0,1}:){0,1}((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])|([0-9a-fA-F]{1,4}:){1,4}:((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9]))")
-debug_mes = ""
 
 # RFC1918 Detector
 def isRFC1918(ip):
@@ -143,7 +143,7 @@ def replace_str(s):
 
     return repl
 
-def mainloop(args: list, src_path: str, dst_path: str, debug_log):
+def mainloop(args: list, src_path: str, dst_path: str):
 
     global logcontents
     global opflags
@@ -167,7 +167,7 @@ def mainloop(args: list, src_path: str, dst_path: str, debug_log):
         logcontents.append(logfile_per_list.copy())
         logfile_per_list.clear()
     
-    debug_mes += f"[SYSLOG] Sylog file {src_path} indexed and loaded, entering obfuscation loop\n"
+    logging.info(f"[SYSLOG] Sylog file {src_path} indexed and loaded, entering obfuscation loop")
 
     # Walk through contents & scrub
     for l_off, logfile in enumerate(logcontents):
@@ -181,7 +181,7 @@ def mainloop(args: list, src_path: str, dst_path: str, debug_log):
                         str_repl[u] = logentry["user"] = f'"{replace_str(u)}"'
                     else:
                         logentry["user"] = str_repl[logentry['user']]
-                    debug_mes += f"[SYSLOG] \\user\\ field identified and replaced:\n\t{u} -> {str_repl[u]}\n"
+                    logging.debug(f"[SYSLOG] \\user\\ field identified and replaced:\n\t{u} -> {str_repl[u]}")
 
                 # ip addresses (also under"ui" & msg)
                 if ("srcip" in logentry.keys()):
@@ -193,7 +193,9 @@ def mainloop(args: list, src_path: str, dst_path: str, debug_log):
                         else:
                             replacement = replace_ip6(logentry["srcip"])
                             logentry["srcip"] = replacement
-                        debug_mes += f"[SYSLOG] \\srcip (ipv6)\\ field identified and replaced:\n\t{logentry['srcip']} -> {replacement}\n"
+                        print(f"Original: {logentry}")
+                        logging.debug(f"[SYSLOG] \\srcip (ipv6)\\ field identified and replaced:\n\t{logentry['srcip']} -> {replacement}")
+
                     else:
                         if ("\"" in logentry['srcip']):
                             replacement = replace_ip4(logentry["srcip"][1:-1])
@@ -201,7 +203,7 @@ def mainloop(args: list, src_path: str, dst_path: str, debug_log):
                         else:
                             replacement = replace_ip4(logentry['srcip'])
                             logentry["srcip"] = replacement
-                        debug_mes += f"[SYSLOG] \\srcip (ipv4)\\ field identified and replaced:\n\t{logentry['srcip']} -> {replacement}\n"
+                        logging.debug(f"[SYSLOG] \\srcip (ipv4)\\ field identified and replaced:\n\t{logentry['srcip']} -> {replacement}")
 
                 if ("dstip" in logentry.keys()):
                     replacement = ""
@@ -212,7 +214,7 @@ def mainloop(args: list, src_path: str, dst_path: str, debug_log):
                         else:
                             replacement = replace_ip6(logentry["dstip"])
                             logentry["dstip"] = replacement
-                        debug_mes += f"[SYSLOG] \\dstip (ipv6)\\ field identified and replaced:\n\t{logentry['dstip']} -> {replacement}\n"
+                        logging.debug(f"[SYSLOG] \\dstip (ipv6)\\ field identified and replaced:\n\t{logentry['dstip']} -> {replacement}")
 
                     else:
                         if ("\"" in logentry['dstip']):
@@ -221,8 +223,7 @@ def mainloop(args: list, src_path: str, dst_path: str, debug_log):
                         else:
                             replacement = replace_ip4(logentry["dstip"])
                             logentry["dstip"] = replacement
-                        debug_mes += f"[SYSLOG] \\dstip (ipv4)\\ field identified and replaced:\n\t{logentry['dstip']} -> {replacement}\n"
-
+                        logging.debug(f"[SYSLOG] \\dstip (ipv4)\\ field identified and replaced:\n\t{logentry['dstip']} -> {replacement}")
 
                 if ("ui" in logentry.keys()):
                     ip_search = ip4.search(logentry['ui'])
@@ -230,7 +231,7 @@ def mainloop(args: list, src_path: str, dst_path: str, debug_log):
                         ip_search = ip6.search(logentry['ui'])
                     if (ip_search is not None):
                         logentry['ui'] = logentry['ui'][:ip_search.span()[0]] + replace_ip4(ip_search.group()) + logentry['ui'][ip_search.span()[1]:]
-                        debug_mes += f"[SYSLOG] \\ui (ipv4)\\ field identified and replaced:\n\t{logentry[ip_search.span()[0]:ip_search.span()[1]]} -> {replace_ip4(ip_search.group())}\n"
+                        logging.debug(f"[SYSLOG] \\ui (ipv4)\\ field identified and replaced:\n\t{logentry[ip_search.span()[0]:ip_search.span()[1]]} -> {replace_ip4(ip_search.group())}")
                 
                 # msg
                 if ("msg" in logentry.keys()):
@@ -239,13 +240,13 @@ def mainloop(args: list, src_path: str, dst_path: str, debug_log):
                     if (ip_search is None):
                         ip_search = ip6.search(logentry['msg'])
                     if (ip_search is not None):
-                        logentry['msg'] = logentry['msg'][:ip_search.span()[0]] + replace_ip4(ip_search.group()) + logentry['msg'][ip_search.span()[1]:]
+                        logging.debug(f"[SYSLOG] \\ip in msg\\ identified and replaced:\n\t{ip_search.group()} -> {replace_ip4(ip_search.group())}")
 
                     for og_name, rep_name in str_repl.items():
                         m = re.search(og_name, logentry['msg'])
                         if (m is not None):
                             logentry['msg'] = logentry['msg'][:m.span()[0]] + rep_name[1:-1] + logentry['msg'][m.span()[1]:]
-                            debug_mes += f"[SYSLOG] \\critical string in msg\\ identified and replaced:\n\t{og_name} -> {rep_name}\n\tNew entry: {logentry['msg']}\n"
+                            logging.debug(f"[SYSLOG] \\critical string in msg\\ identified and replaced:\n\t{og_name} -> {rep_name}\n\tNew entry: {logentry['msg']}")
                 
                 # device names
                 if ('-pd' not in opflags and "devname" in logentry.keys()):
@@ -256,7 +257,7 @@ def mainloop(args: list, src_path: str, dst_path: str, debug_log):
                         replacement = str_repl[d] = logentry['devname'] = f'"{replace_str(d)}"'
                     else:
                         logentry['devname'] = str_repl[logentry['devname']]
-                    debug_mes += f"[SYSLOG] \\devname\\ field identified and replaced:\n\t{original} -> {replacement}\n"
+                    logging.debug(f"[SYSLOG] \\devname\\ field identified and replaced:\n\t{original} -> {replacement}")
 
                 # vdom names
                 if ('-pv' not in opflags and "vd" in logentry.keys()):
@@ -268,11 +269,11 @@ def mainloop(args: list, src_path: str, dst_path: str, debug_log):
                             replacement = str_repl[v] = logentry['vd'] = f'"{replace_str(v)}"'
                         else:
                             logentry['vd'] = str_repl[logentry['vd']]
-                    debug_mes += f"[SYSLOG] \\vd\\ field identified and replaced:\n\t{original} -> {replacement}\n"
+                    logging.debug(f"[SYSLOG] \\vd\\ field identified and replaced:\n\t{original} -> {replacement}")
                 # CSF names
             
             except (KeyError, IndexError) as e:
-                debug_mes += f"[SYSLOG] \\ERROR\\ Incomplete log file\n\nLog File:\n\t{logfile}\n\nLog Entry:\n\t{logentry}\n\n"
+                logging.error(f"[SYSLOG] \\ERROR\\ Incomplete log file\n\nLog File:\n\t{logfile}\n\nLog Entry:\n\t{logentry}")
 
             logfile[entry_off] = logentry.copy()
         logcontents[l_off] = logfile.copy()
@@ -285,7 +286,3 @@ def mainloop(args: list, src_path: str, dst_path: str, debug_log):
                 for b, a in d.items():
                     modfile.write(f"{b}={a} ")
                 modfile.write("\n")
-    
-    if debug_log:
-        debug_log.write(debug_mes + "\n\n")
-        debug_mes = ""
