@@ -510,13 +510,18 @@ def obf_on_submit(dirTree):
             rr_ops.append((path, modified_fp))
             continue
         else:
+            contents = ""
+            with open(path, 'r') as exempt_file:
+                contents = exempt_file.read()
+            with open(modified_fp, 'w') as copy:
+                copy.write(contents)
             print(f"[EXEMPT] - {path} exempted and copied to {modified_fp}")
             continue
 
         append_mstr_dicts()
         set_repl_dicts()
 
-    clear_non_fedwalk_repl_dicts()
+    clear_non_fedwalk_repl_dicts() # free up memory, all we're doing is fedwalk/regex replace now
 
     if len(save_fedwalk_for_last) > 0:
         sync_fedwalk_mstr_dicts()
@@ -577,85 +582,86 @@ options = {"-pi, --preserve-ips":"Program scrambles routable IP(v4&6) addresses 
                   (replacements can be empty). Ensure regex strings with backslash escapes are DOUBLE escaped \
                     (this is converted within the program)"}
 
-# Take in directory from the CLI
-args = sys.argv
+if __name__ == "__main__":
+    # Take in directory from the CLI
+    args = sys.argv
 
-if len(args) < 2:
-    print("Usage:\n\tpython fortiobfuscate.py <directory> [options]")
-    sys.exit()
+    if len(args) < 2:
+        print("Usage:\n\tpython fortiobfuscate.py <directory> [options]")
+        sys.exit()
 
-if args[1] == "-h":
-    print("Options")
-    for k,v in options.items():
-        print(f"{k} : {v}")
-    sys.exit()
+    if args[1] == "-h":
+        print("Options")
+        for k,v in options.items():
+            print(f"{k} : {v}")
+        sys.exit()
 
-else:
-    og_workspace = args[1]
-    if len(args) > 2:
-        for a in args[2:]:
-            if '-map=' in a:
-                importMap(a.split('=')[1])
-            elif '-d' in a:
-                debug_mode = True
-                log_lvl = logging.DEBUG
-            elif '-ord' in a:
-                ordered_rr = True
-            elif '-agg' in a:
-                agg_fedwalk = True
-            elif '-gr' in a:
-                generic_rep = True
-            elif '-ir=' in a:
-                rr_list = a.split('=')[1]
-                if rr_list:
-                    try:
-                        construct = []
-                        subl = []
-                        reg = ""
-                        rep = ""
-                        acom = False
-                        close = False
-                        for ch in rr_list:
-                            if ',' in ch:
-                                if close:
-                                    close = False
+    else:
+        og_workspace = args[1]
+        if len(args) > 2:
+            for a in args[2:]:
+                if '-map=' in a:
+                    importMap(a.split('=')[1])
+                elif '-d' in a:
+                    debug_mode = True
+                    log_lvl = logging.DEBUG
+                elif '-ord' in a:
+                    ordered_rr = True
+                elif '-agg' in a:
+                    agg_fedwalk = True
+                elif '-gr' in a:
+                    generic_rep = True
+                elif '-ir=' in a:
+                    rr_list = a.split('=')[1]
+                    if rr_list:
+                        try:
+                            construct = []
+                            subl = []
+                            reg = ""
+                            rep = ""
+                            acom = False
+                            close = False
+                            for ch in rr_list:
+                                if ',' in ch:
+                                    if close:
+                                        close = False
+                                        continue
+                                    acom = True
+                                    subl.append(reg)
                                     continue
-                                acom = True
-                                subl.append(reg)
-                                continue
-                            if ']' in ch:
-                                acom = False
-                                close = True
-                                subl.append(rep)
-                                construct.append(subl)
-                                continue
-                            if '[' in ch:
-                                reg = ""
-                                rep = ""
-                                subl = []
-                                continue
-                            if acom:
-                                rep += ch
-                                continue
-                            reg += ch
-                        for n, group in enumerate(construct):
-                            import_rr[str(n)] = group
+                                if ']' in ch:
+                                    acom = False
+                                    close = True
+                                    subl.append(rep)
+                                    construct.append(subl)
+                                    continue
+                                if '[' in ch:
+                                    reg = ""
+                                    rep = ""
+                                    subl = []
+                                    continue
+                                if acom:
+                                    rep += ch
+                                    continue
+                                reg += ch
+                            for n, group in enumerate(construct):
+                                import_rr[str(n)] = group
 
-                    except:
-                        print("-ir list is not formatted correctly:\n\t-ir=\"[reg1,rep1],[reg2,rep2]...\"\n")
-                        x = input("Do you wish to continue?\n\t(y/N) > ")
-                        if 'y' not in x:
-                            sys.exit(0)
-            elif '-js=' in a:
-                json_file = a.split('=')[1]
-            else:
-                opflags.append(a)
+                        except:
+                            print("-ir list is not formatted correctly:\n\t-ir=\"[reg1,rep1],[reg2,rep2]...\"\n")
+                            x = input("Do you wish to continue?\n\t(y/N) > ")
+                            if 'y' not in x:
+                                sys.exit(0)
+                elif '-js=' in a:
+                    json_file = a.split('=')[1]
+                else:
+                    opflags.append(a)
 
-    # Initialize logging with attrs
-    logging.basicConfig(filename=log_fn, filemode='w', level=log_lvl, format=log_frmt)
+        # Initialize logging with attrs
+        logging.basicConfig(filename=log_fn, filemode='w', level=log_lvl, format=log_frmt)
 
-# Build target directory for modified files in the backend
-mod_workspace, dirtree_of_workspace = buildDirTree(og_workspace)
-files = getFiles(dirtree_of_workspace)
+    # Build target directory for modified files in the backend
+    mod_workspace, dirtree_of_workspace = buildDirTree(og_workspace)
+    files = getFiles(dirtree_of_workspace)
 
-obf_on_submit(files)
+    obf_on_submit(files)

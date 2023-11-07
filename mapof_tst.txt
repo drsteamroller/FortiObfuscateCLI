@@ -1,0 +1,8 @@
+
+Master Dictionaries:
+
+>>> IP Addresses
+
+>>> MAC Addresses
+
+>>> Strings

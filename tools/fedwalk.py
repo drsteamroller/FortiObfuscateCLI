@@ -184,12 +184,8 @@ def modifyTxtFile(txtfile):
 	if type(txtfile) != list:
 		return txtfile
 
-	total = len(txtfile)
-
 	for i, line in enumerate(txtfile):
 		
-		print(f"{i}/{total}")
-
 		ipsearch = ip4.findall(line)
 		
 		if ipsearch:

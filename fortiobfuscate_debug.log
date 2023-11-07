@@ -1,0 +1,8 @@
+DEBUG: is_binary: 'tst\\fedwalk\\sample.txt'
+DEBUG: nontext_ratio1: 0.0
+DEBUG: nontext_ratio2: 1.0
+DEBUG: is_likely_binary: False
+DEBUG: detected_encoding: {'encoding': 'ascii', 'confidence': 1.0, 'language': ''}
+DEBUG: failure: decodable_as_unicode: False
+DEBUG: [FEDWALK_txt] \ipv4 address\ identified and replaced:
+	1.1.1.1 -> 223.211.49.127
