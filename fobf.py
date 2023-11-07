@@ -6,6 +6,7 @@ import sys
 import os
 import re
 import logging
+import time
 from binascii import hexlify, unhexlify
 
 try:
@@ -31,6 +32,8 @@ debug_mode = False
 log_fn = "fortiobfuscate_debug.log"
 log_lvl = logging.INFO
 log_frmt = '%(levelname)s: %(message)s'
+
+num_procs = 1
 
 sysslash = '/'
 # Gotta love Windows
@@ -524,16 +527,28 @@ def obf_on_submit(dirTree):
     clear_non_fedwalk_repl_dicts() # free up memory, all we're doing is fedwalk/regex replace now
 
     if len(save_fedwalk_for_last) > 0:
+        start_time = time.time()
         sync_fedwalk_mstr_dicts()
-        for num, (src, dst) in enumerate(save_fedwalk_for_last):
-            fedwalk.mainloop(opflags, src, dst)
-            print(f"[FEDWALK] - {src} obfuscated and written to {dst}")
+        if num_procs <= 1:
+            for num, (src, dst) in enumerate(save_fedwalk_for_last):
+                fedwalk.mainloop(opflags, src, dst)
+                print(f"[FEDWALK] - {src} obfuscated and written to {dst}")
+        else:
+            srcs = []
+            dsts = []
+            for src, dst in save_fedwalk_for_last:
+                srcs.append(src)
+                dsts.append(dst)
+            fedwalk.mainLoopMultiprocessed(opflags, srcs, dsts, num_procs)
+        print(f"Execution took {time.time() - start_time} seconds")
 
     if agg_fedwalk and len(aggressive_fedwalk) > 0:
         sync_fedwalk_mstr_dicts()
         for src in aggressive_fedwalk:
             fedwalk.mainloop(opflags, src, src)
             print(f"[FEDWALK] - Additional pass through on {src}, overwritten in place")
+
+    sync_fedwalk_mstr_dicts()
 
     if len(rr_ops) > 0:
         for src, dst in rr_ops:
@@ -566,12 +581,12 @@ def obf_on_submit(dirTree):
         mapfile_out.write(map_output)
 
 options = {"-pi, --preserve-ips":"Program scrambles routable IP(v4&6) addresses by default, use this option to preserve original IP addresses",\
-		   "-pm, --preserve-macs":"Disable MAC address scramble",\
-		   "-ps, --preserve-strings":"Disable sensitive string scramble",\
-			"-sPIP, --scramble-priv-ips":"Scramble private/non-routable IP addresses",\
-			"-sp, --scrub-payload":"Sanitize (some) payload in packet for pcaps",\
-			"-ns":"Non-standard ports used. By default pcapsrb.py assumes standard port usage, use this option if the pcap to be scrubbed uses non-standard ports",\
-			"-map=<MAPFILE>":"Take a map file output from any FFI program and input it into this program to utilize the same replacements",\
+           "-pm, --preserve-macs":"Disable MAC address scramble",\
+           "-ps, --preserve-strings":"Disable sensitive string scramble",\
+            "-sPIP, --scramble-priv-ips":"Scramble private/non-routable IP addresses",\
+            "-sp, --scrub-payload":"Sanitize (some) payload in packet for pcaps",\
+            "-ns":"Non-standard ports used. By default pcapsrb.py assumes standard port usage, use this option if the pcap to be scrubbed uses non-standard ports",\
+            "-map=<MAPFILE>":"Take a map file output from any FFI program and input it into this program to utilize the same replacements",\
             "-agg":"Enables a second runthrough with fedwalk of all programs in these directories: 'configs', 'syslogs', and 'pcaps'",\
             "-d":"Enable debug logging\n",\
             "\nThe following options assume you are using the Regex Replacer (rr path) folder": "\n----------------------------------------------------\n",\
@@ -611,6 +626,11 @@ if __name__ == "__main__":
                     agg_fedwalk = True
                 elif '-gr' in a:
                     generic_rep = True
+                elif '-mp' in a:
+                    try:
+                        num_procs = int(a.split('=')[1])
+                    except:
+                        logging.warning("-mp needs to be passed an integer, skipping")
                 elif '-ir=' in a:
                     rr_list = a.split('=')[1]
                     if rr_list:
