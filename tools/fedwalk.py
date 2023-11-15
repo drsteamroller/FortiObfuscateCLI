@@ -8,7 +8,6 @@ import random
 import logging
 from binaryornot.check import is_binary
 import multiprocessing as mp
-import threading as th
 
 # GLOBAL VARS
 
@@ -134,7 +133,10 @@ def replace_ip4(ip):
         return ip
     if ('0.0.0.0' == ip):
         return ip
-    if (ip not in ip_repl.keys()):
+    # If we've replaced it before, pick out that replacement and return it
+    try:
+        return ip_repl[ip]
+    except:
         repl = ""
         if (isRFC1918(ip) and "-sPIP" in opflags and "-pi" not in opflags):
             octets = ip.split('.')
@@ -145,10 +147,6 @@ def replace_ip4(ip):
             repl = ip
         ip_repl[ip] = repl
         return repl
-    
-    # If we've replaced it before, pick out that replacement and return it
-    else:
-        return ip_repl[ip]
 
 def replace_ip6(ip):
 
@@ -171,44 +169,47 @@ def replace_str(s):
     return s
 
 # MP Functions:
-def replace_ip4MP(ip, mgr):
+def replace_ip4MP(ip, mgr, ag):
+
     if (isNetMask(ip)):
         return ip
     if ('0.0.0.0' == ip):
         return ip
-    if (ip not in mgr.keys()):
+    
+    # If we've replaced it before, pick out that replacement and return it
+    try:
+        return mgr[ip]
+
+    except:
         repl = ""
-        if (isRFC1918(ip) and "-sPIP" in opflags and "-pi" not in opflags):
+        if (isRFC1918(ip) and "-sPIP" in ag and "-pi" not in ag):
             octets = ip.split('.')
             repl = f"{octets[0]}.{octets[1]}.{random.randrange(0, 256)}.{random.randrange(1, 256)}"
-        elif (not isRFC1918(ip) and "-pi" not in opflags):
+        elif (not isRFC1918(ip) and "-pi" not in ag):
             repl = f"{random.randrange(1, 255)}.{random.randrange(0, 255)}.{random.randrange(0, 255)}.{random.randrange(1, 255)}"
         else:
             repl = ip
         mgr[ip] = repl
         return repl
-    
-    # If we've replaced it before, pick out that replacement and return it
-    else:
-        return mgr[ip]
 
-def replace_ip6MP(ip, mgr):
+def replace_ip6MP(ip, mgr, ag):
     if not isValidIP6(ip):
         return ip
     
-    if (ip not in mgr.keys() and "-pi" not in opflags):
+    if (ip not in mgr.keys() and "-pi" not in ag):
         repl = f'{hex(random.randrange(1, 65535))[2:]}:{hex(random.randrange(1, 65535))[2:]}:{hex(random.randrange(1, 65535))[2:]}:{hex(random.randrange(1, 65535))[2:]}:{hex(random.randrange(1, 65535))[2:]}:{hex(random.randrange(1, 65535))[2:]}:{hex(random.randrange(1, 65535))[2:]}:{hex(random.randrange(1, 65535))[2:]}'
         mgr[ip] = repl
         return repl
-    elif ("-pi" not in opflags):
+    elif ("-pi" not in ag):
         return mgr[ip]
     else:
         return ip
 
 def replace_strMP(str, mgr):
-    if str in mgr.keys():
+    try:
         return mgr[str]
-    return str
+    except:
+        return str
 
 mtd = ""
 
@@ -282,7 +283,7 @@ def modifyBinFile(binfile):
     return binfile
 '''
 def mpmodifyTxtFile(args):
-    txtfile, ip_mgr, str_mgr, procnum, return_dict = args
+    txtfile, ip_mgr, str_mgr, procnum, return_dict, ag = args
 
     ip_cache = dict()
     str_cache = dict()
@@ -304,10 +305,10 @@ def mpmodifyTxtFile(args):
 
                 # actually replace
                 for ip in ipsearch:
-                    if ip in ip_cache.keys():
-                        line.replace(ip, ip_cache[ip])
-                    else:
-                        repl = replace_ip4MP(ip, ip_mgr)
+                    try:
+                        line = line.replace(ip, ip_cache.get())
+                    except:
+                        repl = replace_ip4MP(ip, ip_mgr, ag)
                         line = line.replace(ip, repl)
                         ip_cache[ip] = repl
 
@@ -321,19 +322,23 @@ def mpmodifyTxtFile(args):
                 ip6search = ph
 
                 for i6 in ip6search:
-                    if i6 in ip_cache.keys():
-                        line.replace(i6, ip_cache[i6])
-                    else:
+                    try:
+                        line = line.replace(i6, ip_cache[i6])
+                    except:
                         repl = replace_ip4MP(i6, ip_mgr)
-                        line = line.replace(i6, repl)
+                        line = line.replace(i6, repl, ag)
                         ip_cache[i6] = repl
 
             for k, v in str_repl.items():
                 strsearch = re.findall(k, line)
                 if strsearch:
                     for ss in strsearch:
-                        repl = replace_strMP(ss, str_mgr)
-                        line = line.replace(ss, repl)
+                        try:
+                            line = line.replace(ss, str_cache[ss])
+                        except:
+                            repl = replace_strMP(ss, str_mgr)
+                            line = line.replace(ss, repl)
+                            str_cache[ss] = repl
             
             txtfile[i] = line
     except Exception as e:
@@ -346,7 +351,10 @@ def mainLoopMultiprocessed(args: list, src_paths: list, dst_paths: list, num_cpu
 
     global ip_repl
     global str_repl
-
+    global opflags
+    
+    opflags = args
+    
     # read all the src files into fileLines, record their sizes in order in fileSizes
     fileLines = []
     fileSizes = []
@@ -379,10 +387,10 @@ def mainLoopMultiprocessed(args: list, src_paths: list, dst_paths: list, num_cpu
 
     ## MP Stuff
     with mp.Pool(processes=num_cpus) as pool:
-        pool_results = pool.map(mpmodifyTxtFile, [(seg, ip_mgr, str_mgr, e, return_dict) for e, seg in enumerate(segments)])
-
+        pool_results = pool.map(mpmodifyTxtFile, [(seg, ip_mgr, str_mgr, e, return_dict, opflags) for e, seg in enumerate(segments)])
         pool.close()
         pool.join()
+
     '''procList = []
     for e, seg in enumerate(segments):
         p = mp.Process(target=mpmodifyTxtFile, args=(seg, ip_mgr, str_mgr, e, return_dict))

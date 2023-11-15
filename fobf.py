@@ -33,7 +33,7 @@ log_fn = "fortiobfuscate_debug.log"
 log_lvl = logging.INFO
 log_frmt = '%(levelname)s: %(message)s'
 
-num_procs = 1
+num_procs = 4
 
 sysslash = '/'
 # Gotta love Windows
@@ -529,7 +529,7 @@ def obf_on_submit(dirTree):
     if len(save_fedwalk_for_last) > 0:
         start_time = time.time()
         sync_fedwalk_mstr_dicts()
-        if num_procs <= 1:
+        if num_procs < 1:
             for num, (src, dst) in enumerate(save_fedwalk_for_last):
                 fedwalk.mainloop(opflags, src, dst)
                 print(f"[FEDWALK] - {src} obfuscated and written to {dst}")
@@ -544,9 +544,13 @@ def obf_on_submit(dirTree):
 
     if agg_fedwalk and len(aggressive_fedwalk) > 0:
         sync_fedwalk_mstr_dicts()
-        for src in aggressive_fedwalk:
-            fedwalk.mainloop(opflags, src, src)
-            print(f"[FEDWALK] - Additional pass through on {src}, overwritten in place")
+        if num_procs < 1:
+            for src in aggressive_fedwalk:
+                fedwalk.mainloop(opflags, src, src)
+                print(f"[FEDWALK] - Additional pass through on {src}, overwritten in place")
+        else:
+            fedwalk.mainLoopMultiprocessed(opflags, aggressive_fedwalk, aggressive_fedwalk, num_procs)
+            print(f"[FEDWALK] - Additional pass through on {aggressive_fedwalk}, overwritten in place")
 
     sync_fedwalk_mstr_dicts()
 
@@ -567,7 +571,7 @@ def obf_on_submit(dirTree):
     
     map_output = ""
 
-    map_output += "\nMaster Dictionaries:\n\n>>> IP Addresses\n"
+    map_output += "Master Dictionaries:\n\n>>> IP Addresses\n"
     for k,v in ip_repl_mstr.items():
         map_output += f"{k} -> {v}\n"
     map_output += "\n>>> MAC Addresses\n"
@@ -588,14 +592,14 @@ options = {"-pi, --preserve-ips":"Program scrambles routable IP(v4&6) addresses 
             "-ns":"Non-standard ports used. By default pcapsrb.py assumes standard port usage, use this option if the pcap to be scrubbed uses non-standard ports",\
             "-map=<MAPFILE>":"Take a map file output from any FFI program and input it into this program to utilize the same replacements",\
             "-agg":"Enables a second runthrough with fedwalk of all programs in these directories: 'configs', 'syslogs', and 'pcaps'",\
-            "-d":"Enable debug logging\n",\
-            "\nThe following options assume you are using the Regex Replacer (rr path) folder": "\n----------------------------------------------------\n",\
+            "-d":"Enable debug logging",\
+            "--override=<num_procs>":"Override the amount of child processes spawned for the 'fedwalk' runtime. Default is 4. Use at your own risk.\n",\
+            "\nThe following options assume you are using the Regex Replacer (rr path) folder": "\n-----------------------------------------------------------------------------------\n",\
             "-ord":"Use if utilizing the 'rr' path. Makes it so order matters for regex replacement",\
             "-js=<JSON-FILE>": "Use a different JSON file to import regex strings and replacements. Look at .\\tools\\precons.json as an example",\
             "-gr": "Generic replacement, if you supply a regex statement and an empty replacement string, this flag will fill it with random characters",\
-            "-ir=\"[regex,rep],[regex2,rep2],...\"": "set -ir equal to a list of lists containing regex and replacements\
-                  (replacements can be empty). Ensure regex strings with backslash escapes are DOUBLE escaped \
-                    (this is converted within the program)"}
+            "-ir=\"[regex,rep],[regex2,rep2],...\"": "set -ir equal to a list of lists containing regex and replacements \
+(replacements can be empty). Ensure regex strings with backslash escapes are DOUBLE escaped (this is converted within the program)"}
 
 if __name__ == "__main__":
     # Take in directory from the CLI
@@ -626,11 +630,16 @@ if __name__ == "__main__":
                     agg_fedwalk = True
                 elif '-gr' in a:
                     generic_rep = True
-                elif '-mp' in a:
-                    try:
-                        num_procs = int(a.split('=')[1])
-                    except:
-                        logging.warning("-mp needs to be passed an integer, skipping")
+                elif '--override=' in a:
+                    ui = input(f"You have specified the override setting. This will change the number \
+of processes used to expedite obfuscation (Default = {num_procs}). Use this setting at your own risk.\n\
+Do you wish to use {a.split('=')[1]} child processes?\n\t(y/N) > ")
+                    
+                    if 'y' in ui.lower():
+                        try:
+                            num_procs = int(a.split('=')[1])
+                        except:
+                            logging.warning("-mp needs to be passed an integer, skipping")
                 elif '-ir=' in a:
                     rr_list = a.split('=')[1]
                     if rr_list:

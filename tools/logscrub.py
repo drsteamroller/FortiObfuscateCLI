@@ -148,7 +148,6 @@ def mainloop(args: list, src_path: str, dst_path: str):
     global logcontents
     global opflags
     opflags = args
-    global debug_mes
 
     # Load contents
 

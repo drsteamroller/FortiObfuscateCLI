@@ -27,6 +27,11 @@ The specified directory must contain the following subdirectories corresponding 
 
 Any files in any other subdirectory (or at the top level) will be exempted from obfuscation.
 
+## New Features
+
+- Now supports multiprocessing to cut down on runtime. Currently, it only affects files that are marked under fedwalk. By default, spawns 4 child processes on runtime, and can be changed with the --override=<num_procs> CLI arg, which is detailed in the -h output as well.
+  - Seeing a little over 50% reduction in time spent running with 4 child processes. Diminishing returns are expected around 8 spawned processes
+
 ## Why aren't all sensitive values getting scrubbed?
 
 This is best explained with what each menu option does
