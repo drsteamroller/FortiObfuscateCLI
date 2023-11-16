@@ -283,10 +283,12 @@ def modifyBinFile(binfile):
     return binfile
 '''
 def mpmodifyTxtFile(args):
-    txtfile, ip_mgr, str_mgr, procnum, return_dict, ag = args
+    txtfile, ip_mgr, str_mgr, procnum, ag, ip_repld, str_repld = args
 
-    ip_cache = dict()
-    str_cache = dict()
+    ip_cache = ip_repld
+    str_cache = str_repld
+
+    log = []
 
     if type(txtfile) != list:
         return txtfile
@@ -305,12 +307,15 @@ def mpmodifyTxtFile(args):
 
                 # actually replace
                 for ip in ipsearch:
+                    repl = ""
                     try:
                         line = line.replace(ip, ip_cache.get())
                     except:
                         repl = replace_ip4MP(ip, ip_mgr, ag)
                         line = line.replace(ip, repl)
                         ip_cache[ip] = repl
+                    log.append(f"[FEDWALK_txt] \\ipv4 address\\ identified and replaced:\n\t{ip} -> {repl}")
+
 
             ip6search = ip6.findall(line)
             
@@ -322,12 +327,15 @@ def mpmodifyTxtFile(args):
                 ip6search = ph
 
                 for i6 in ip6search:
+                    repl = ""
                     try:
                         line = line.replace(i6, ip_cache[i6])
                     except:
                         repl = replace_ip4MP(i6, ip_mgr)
                         line = line.replace(i6, repl, ag)
                         ip_cache[i6] = repl
+                    log.append(f"[FEDWALK_txt] \\ipv6 address\\ identified and replaced:\n\t{i6} -> {repl}")
+
 
             for k, v in str_repl.items():
                 strsearch = re.findall(k, line)
@@ -339,12 +347,14 @@ def mpmodifyTxtFile(args):
                             repl = replace_strMP(ss, str_mgr)
                             line = line.replace(ss, repl)
                             str_cache[ss] = repl
+                    log.append(f"[FEDWALK_txt] \\string\\ identified and replaced:\n\t{ss} -> {repl}")
+
             
             txtfile[i] = line
     except Exception as e:
         print(f"Process {procnum} encountered {e}")
 
-    return_dict[procnum] = txtfile
+    return [txtfile, log]
 
 # Alternate main function with multiprocessing
 def mainLoopMultiprocessed(args: list, src_paths: list, dst_paths: list, num_cpus):
@@ -359,7 +369,7 @@ def mainLoopMultiprocessed(args: list, src_paths: list, dst_paths: list, num_cpu
     fileLines = []
     fileSizes = []
 
-    # Grab total size in 
+    # Grab total size in lines
     totalSize = 0
     
     for src in src_paths:
@@ -379,17 +389,23 @@ def mainLoopMultiprocessed(args: list, src_paths: list, dst_paths: list, num_cpu
 
     segments.append(fileLines[chunkSize*(num_cpus-1):])
 
+    proc_logs = []
+
     shared_resource_mgr = mp.Manager()
 
-    return_dict = shared_resource_mgr.dict()
+    return_dict = {}
     ip_mgr = shared_resource_mgr.dict(ip_repl)
     str_mgr = shared_resource_mgr.dict(str_repl)
 
     ## MP Stuff
     with mp.Pool(processes=num_cpus) as pool:
-        pool_results = pool.map(mpmodifyTxtFile, [(seg, ip_mgr, str_mgr, e, return_dict, opflags) for e, seg in enumerate(segments)])
+        pool_results = pool.map(mpmodifyTxtFile, [(seg, ip_mgr, str_mgr, e, opflags, ip_repl.copy(), str_repl.copy()) for e, seg in enumerate(segments)])
         pool.close()
         pool.join()
+
+        for e, result in enumerate(pool_results):
+            return_dict[e] = result[0]
+            proc_logs.extend(result[1])
 
     '''procList = []
     for e, seg in enumerate(segments):
@@ -415,6 +431,9 @@ def mainLoopMultiprocessed(args: list, src_paths: list, dst_paths: list, num_cpu
         with open(dst_paths[e], 'w') as wr:
             wr.writelines(fileLines[offset:offset+size])
             offset += size
+    
+    for logline in proc_logs:
+        logging.debug(logline)
 
 def mainloop(args: list, src_path: str, dst_path: str):
 
