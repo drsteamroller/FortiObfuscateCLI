@@ -7,6 +7,12 @@ import random
 import time
 import logging
 
+t = int( time.time() * 1000.0 )
+random.seed( ((t & 0xff000000) >> 24) +
+             ((t & 0x00ff0000) >>  8) +
+             ((t & 0x0000ff00) <<  8) +
+             ((t & 0x000000ff) << 24))
+
 # Global Variables
 contents = []
 og_filenames = 0
@@ -133,7 +139,6 @@ def replace_ip4(ip):
         return ip_repl[ip]
 
 def replace_ip6(ip):
-
     if not isValidIP6(ip):
          return ip
 
@@ -147,11 +152,6 @@ def replace_ip6(ip):
         return ip
 
 def salt():
-    t = int( time.time() * 1000.0 )
-    random.seed( ((t & 0xff000000) >> 24) +
-             ((t & 0x00ff0000) >>  8) +
-             ((t & 0x0000ff00) <<  8) +
-             ((t & 0x000000ff) << 24))
     return random.randint(2,8)
 
 def replace_str(s):
@@ -240,6 +240,7 @@ def obfuscate(conf):
     SNMP_HOSTS = False
     IPSEC_P1 = False
     IPSEC_P2 = False
+    USER = False
 
     # Parse through the list containing the lines of the configuration file
     for j, content in enumerate(conf):
@@ -388,6 +389,7 @@ def obfuscate(conf):
         ### SNMP Communities ###
         if ("config system snmp community" in content or "config system snmp user" in content):
             SNMP = True
+            continue
         
         if (not SNMP_HOSTS and SNMP and "edit" in content):
             s = []
@@ -452,9 +454,11 @@ def obfuscate(conf):
         ### VPN Tunnel Names ###
         if ("config vpn ipsec phase1-interface" in content):
             IPSEC_P1 = True
+            continue
 
         if ("config vpn ipsec phase2-interface" in content):
             IPSEC_P2 = True
+            continue
 
         if (IPSEC_P1 and "set remotegw-ddns" in content):
             v = []
@@ -500,7 +504,7 @@ def obfuscate(conf):
             except IndexError:
                 logging.error(f"[CONF] \\ERROR\\ configuration file is not formatted correctly, index out of bounds\n\tMalformed line {i}: \"{content}\"")
             except Exception as e:
-                logging.warning(f"[CONF] \\ERROR\\ something unexpected happened\n\tError {e}\n\tLine #{i}: \"{content}\"")
+                logging.warning(f"[CONF] \\WARN\\ something unexpected happened\n\tError {e}\n\tLine #{i}: \"{content}\"")
             else:
                 logging.debug(f"[CONF] \\IPSEC P2 edit\\ statement enountered and replaced at line #{i}\n\t{v[1]}  ->  {repl}")
                 content = leading
@@ -516,16 +520,80 @@ def obfuscate(conf):
             except IndexError:
                 logging.error(f"[CONF] \\ERROR\\ configuration file is not formatted correctly, index out of bounds\n\tMalformed line {i}: \"{content}\"")
             except Exception as e:
-                logging.warning(f"[CONF] \\ERROR\\ something unexpected happened\n\tError {e}\n\tLine #{i}: \"{content}\"")
+                logging.warning(f"[CONF] \\WARN\\ something unexpected happened\n\tError {e}\n\tLine #{i}: \"{content}\"")
             else:
                 logging.debug(f"[CONF] \\IPSEC P2 set phase1name\\ statement enountered and replaced at line #{i}\n\t{v[2]}  ->  {repl}")
                 content = leading
 
         if (IPSEC_P1 and "end" in content):
             IPSEC_P1 = False
+            continue
 
         if (IPSEC_P2 and "end" in content):
             IPSEC_P2 = False
+            continue
+
+        # Explicit 'config user ...' scrub
+        if ("config user" in content):
+            USER = True
+            continue
+        
+        if USER and "edit" in content:
+            comp = content.strip().split(" ")
+            repl = ""
+            try:
+                repl = replace_str(comp[1])
+                leading += f"{comp[0]} {repl}\n"
+            except IndexError:
+                logging.error(f"[CONF] \\ERROR\\ configuration file not formatted corretly, index out of bounds\n\tMalformed line {i}: \"{content}\"")
+            except Exception as e:
+                logging.warning(f"[CONF] \\WARN\\ Something unexpected happened\n\tError {e}\n\tLine #{i}: \"{content}\"")
+            else:
+                logging.debug(f"[CONF] \\USER edit\\ statement encountered and replaced at line #{i}\n\t{comp[1]}  ->  {repl}")
+                content = leading
+
+        if USER and ("dn" in content or "group-name" in content):
+            # Special Distinguished Name scrub
+            comp = content.strip().split(" ")
+            repl = ""
+            try:
+                dn = comp[2]
+                for h, el in enumerate(dn.split(",")):
+                    eqsp = el.split("=")
+                    repl += f"{eqsp[0]}={replace_str(eqsp[1])},"
+                repl = repl[:-1]
+                leading += f"{comp[0]} {comp[1]} {repl}\n"
+            except IndexError:
+                logging.error(f"[CONF] \\ERROR\\ configuration file not formatted corretly, index out of bounds\n\tMalformed line {i}: \"{content}\"")
+            except Exception as e:
+                logging.warning(f"[CONF] \\WARN\\ Something unexpected happened\n\tError {e}\n\tLine #{i}: \"{content}\"")
+            else:
+                logging.debug(f"[CONF] \\USER DN\\ statement encountered and replaced at line #{i}\n\t{comp[2]}  ->  {repl}")
+                content = leading
+
+        if USER and "username" in content:
+            comp = content.strip().split(" ")
+            repl = ""
+            try:
+                repl = replace_str(comp[2])
+                leading += f"{comp[0]} {comp[1]} {repl}\n"
+            except IndexError:
+                logging.error(f"[CONF] \\ERROR\\ configuration file not formatted corretly, index out of bounds\n\tMalformed line {i}: \"{content}\"")
+            except Exception as e:
+                logging.warning(f"[CONF] \\WARN\\ Something unexpected happened\n\tError {e}\n\tLine #{i}: \"{content}\"")
+            else:
+                logging.debug(f"[CONF] \\USER username\\ statement encountered and replaced at line #{i}\n\t{comp[1]}  ->  {repl}")
+                content = leading
+
+        if USER and "end" in content:
+            USER = False
+            continue
+
+        if "password" in content or "secret" in content or "passwd" in content:
+            comp = content.strip().split(" ")
+            leading += f"{comp[0]} {comp[1]}\n"
+            logging.debug(f"[CONF] \\Password | Secret\\ statement encountered and removed at line #{i}")
+            content = leading
 
         conf[j] = content
 
