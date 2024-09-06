@@ -13,7 +13,7 @@ try:
     import tools.confsrb as conf
     import tools.fedwalk as fedwalk
     import tools.logscrub as log
-    import tools.pcapsrb as pcap
+    import tools.pcap_scrub as pcap
     import tools.regrepl as rr
 except ImportError as e:
     print(f"You must download the entire package from GitHub, and download all dependencies:\n {e}")
@@ -205,176 +205,6 @@ def abbrevIP6(ip6):
     
     return reconst[:-1]
 
-# mstr -> pcap ("x.x.x.x" -> 0xhhhhhhhh)
-def toPCAPFormat(ip_repl_mstr=ip_repl_mstr, p_ip_repl=pcap.ip_repl, mac_repl_mstr=mac_repl_mstr, p_mac_repl=pcap.mac_repl, str_repl_mstr=str_repl_mstr, p_str_repl=pcap.str_repl):
-    """
-    Helper function to convert master dictionaries to pcap dictionaries, since pcap dictionaries\\
-    are hex-based, whereas master and config/syslog/fedwalk dictionaries are text/ascii based
-    """
-    for og_ip, rep_ip in ip_repl_mstr.items():
-
-        if ':' in og_ip:
-            og_quartets = og_ip.split(':')
-            rep_quartets = rep_ip.split(':')
-
-            og_reconstruct = b''
-
-            for index, s in enumerate(og_quartets):
-
-                if len(s) == 0:
-                    amount = 8 - (len(og_quartets) - 1)
-                    zeroes = ('0' * 4) * amount
-                    og_reconstruct = og_reconstruct + bytes(zeroes, 'utf-8')
-                else:
-                    s = ('0' * (4-len(s))) + s
-                    og_reconstruct = og_reconstruct + bytes(s, 'utf-8')
-
-            rep_reconstruct = ''
-            for index, s in enumerate(rep_quartets):
-
-                if len(s) == 0:
-                    amount = 8 - (len(rep_quartets) - 1)
-                    zeroes = ('0' * 4) * amount
-                    rep_reconstruct = rep_reconstruct + zeroes
-                else:
-                    s = ('0' * (4-len(s))) + s
-                    rep_reconstruct = rep_reconstruct + s
-            
-        else:
-            og_octets = og_ip.split('.')
-            rep_octets = rep_ip.split('.')
-
-            og_str = ""
-            rep_str = ""
-
-            for [og, rep] in zip(og_octets, rep_octets):
-                if len(og) == 0 or len(rep) == 0:
-                    continue
-                og = hex(int(og))[2:]
-                rep = hex(int(rep))[2:]
-
-                og_str += ('0'*(2-len(og)) + og)
-                rep_str += ('0'*(2-len(rep)) + rep)
-
-            og_reconstruct = bytes(og_str, 'utf-8')
-            rep_reconstruct = rep_str
-
-        if og_reconstruct not in p_ip_repl.keys():
-            p_ip_repl[unhexlify(og_reconstruct)] = rep_reconstruct
-    
-    for og_mac, rep_mac in mac_repl_mstr.items():
-        og_octets = og_mac.split(":")
-        rep_octets = rep_mac.split(':')
-
-        og_reconstruct = b''
-        rep_reconstruct = b''
-
-        for [o, r] in zip(og_octets, rep_octets):
-            og_reconstruct += bytes(o, 'utf-8')
-            rep_reconstruct += bytes(r, 'utf-8')
-        
-        if og_reconstruct not in p_mac_repl.keys():
-            p_mac_repl[unhexlify(og_reconstruct)] = unhexlify(rep_reconstruct.strip())
-    
-    for og_str, rep_str in str_repl_mstr.items():
-        if type(og_str) == str:
-            og_str = og_str.strip("b'\"")
-            if bytes(og_str, 'utf-8') not in p_str_repl.keys():
-                p_str_repl[bytes(og_str, 'utf-8')] = rep_str
-        else:
-            if og_str not in p_str_repl.keys():
-                p_str_repl[og_str] = rep_str
-
-# pcap -> mstr (0xhhhhhhhh -> "x.x.x.x")
-def fromPCAPFormat(ip_repl_mstr=ip_repl_mstr, p_ip_repl=pcap.ip_repl, mac_repl_mstr=mac_repl_mstr, p_mac_repl=pcap.mac_repl, str_repl_mstr=str_repl_mstr, p_str_repl=pcap.str_repl):
-    """
-    Helper function to convert pcap dictionaries to master dictionaries (hex -> ascii)
-    """
-    for og_ip, rep_ip in p_ip_repl.items():
-        if type(og_ip) == bytes or type(og_ip) == bytearray:
-            og_ip = str(hexlify(og_ip))[2:-1]
-        if type(rep_ip) == bytes or type(rep_ip) == bytearray:
-            rep_ip = str(hexlify(rep_ip))[2:-1]
-
-        og_reconstruct = ""
-        rep_reconstruct = ""
-        if len(og_ip) > 8:
-            four = ""
-            for index, num in enumerate(og_ip):
-                if (index+1)%4 != 0:
-                    four += num
-                else:
-                    og_reconstruct += four + num + ":"
-                    four = ""
-            og_reconstruct = abbrevIP6(og_reconstruct[:-1])
-
-            for index, num in enumerate(rep_ip):
-                if (index+1)%4 != 0:
-                    four += num
-                else:
-                    rep_reconstruct += four + num + ":"
-                    four = ""
-            rep_reconstruct = abbrevIP6(rep_reconstruct[:-1])
-        else:
-            octet = ""
-            for index, num in enumerate(og_ip):
-                if (index+1)%2 != 0:
-                    octet += num
-                else:
-                    octet += num
-                    og_reconstruct += str(int(octet, 16)) + '.'
-                    octet = ""
-            og_reconstruct = og_reconstruct[:-1]
-
-            for index, num in enumerate(rep_ip):
-                if (index+1)%2 != 0:
-                    octet += num
-                else:
-                    octet += num
-                    rep_reconstruct += str(int(octet, 16)) + '.'
-                    octet = ""
-            rep_reconstruct = rep_reconstruct[:-1]
-        if og_reconstruct not in ip_repl_mstr.keys():
-            ip_repl_mstr[og_reconstruct] = rep_reconstruct
-    
-    for og_mac, rep_mac in p_mac_repl.items():
-        if type(og_mac) == bytes or type(og_mac) == bytearray:
-            og_mac = str(hexlify(og_mac))[2:-1]
-        if type(rep_mac) == bytes or type(rep_mac) == bytearray:
-            rep_mac = str(hexlify(rep_mac))[2:-1]
-
-        og_reconstruct = ""
-        rep_reconstruct = ""
-        
-        octet = ""
-        for index, h in enumerate(og_mac):
-            octet += h
-            if (index+1)%2 == 0:
-                og_reconstruct += octet + ':'
-                octet = ""
-        og_reconstruct = og_reconstruct[:-1]
-
-        octet = ""
-        for index, h in enumerate(rep_mac):
-            octet += h
-            if (index+1)%2 == 0:
-                rep_reconstruct += octet + ':'
-                octet = ""
-        rep_reconstruct = rep_reconstruct[:-1]
-
-        if og_reconstruct not in mac_repl_mstr.keys():
-            mac_repl_mstr[og_reconstruct] = rep_reconstruct
-
-    for og_str, rep_str in p_str_repl.items():
-        if type(og_str) == bytes or type(og_str) == bytearray:
-            og_str = og_str.decode('ascii')
-        if type(rep_str) == bytes or type(rep_str) == bytearray:
-            rep_str = rep_str.decode('ascii')
-        
-        if og_str not in str_repl_mstr.keys():
-            og_str = og_str.strip("b'\"")
-            str_repl_mstr[og_str] = rep_str
-
 # For when a map is imported
 def set_repl_dicts():
     """
@@ -395,7 +225,9 @@ def set_repl_dicts():
 
     fedwalk.mac_repl |= mac_repl_mstr
 
-    toPCAPFormat()
+    pcap.ipswap |= ip_repl_mstr
+    pcap.strswap |= str_repl_mstr
+    #toPCAPFormat()
 
 # Grabs the replacement dicts from the sub-programs and appends them to the mstr dicts
 def append_mstr_dicts():
@@ -423,7 +255,12 @@ def append_mstr_dicts():
     if fedwalk.mac_repl:
         mac_repl_mstr = mac_repl_mstr | fedwalk.mac_repl
 
-    fromPCAPFormat()
+    if pcap.ipswap:
+        ip_repl_mstr = ip_repl_mstr | pcap.ipswap
+    if pcap.strswap:
+        str_repl_mstr = str_repl_mstr | pcap.strswap
+
+    #fromPCAPFormat()
 
 def print_mstr_dicts():
 
@@ -450,9 +287,8 @@ def print_child_proc_dicts():
 
 def clear_non_fedwalk_repl_dicts():
 
-    del pcap.ip_repl
-    del pcap.str_repl
-    del pcap.mac_repl
+    del pcap.ipswap
+    del pcap.strswap
     
     del log.ip_repl
     del log.str_repl
@@ -606,7 +442,7 @@ if __name__ == "__main__":
     args = sys.argv
 
     if len(args) < 2:
-        print("Usage:\n\tpython fortiobfuscate.py <directory> [options]")
+        print("Usage:\n\tpython fobf.py <directory> [options]")
         sys.exit()
 
     if args[1] == "-h":
