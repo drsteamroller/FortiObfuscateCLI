@@ -19,6 +19,17 @@ except ImportError as e:
     print(f"You must download the entire package from GitHub, and download all dependencies:\n {e}")
     sys.exit()
 
+### Disclaimer ###
+
+ack = input("\
+You are about to run the FortiObfuscate scrubbing script. This script does not scrub every sensitive value 100 percent of the time\n\
+Always perform a manual review before submitting any material to any person(s) outside of Fortinet Federal, Inc.\n\
+Type 'I acknowledge' to proceed\n\
+>>>  ")
+
+if not('I acknowledge' in ack):
+    sys.exit(1)
+
 ip_repl_mstr = {}
 mac_repl_mstr = {}
 str_repl_mstr = {}

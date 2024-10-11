@@ -1,3 +1,22 @@
+#!/usr/bin/env python3
+#############################################################################################
+#                 PCAP sanitization for Federal customers
+# Usage:
+#		pcap_scrub.py [file].pcap [options]
+#		
+# Options:
+#		--help : Shows these options
+#		-pm, --preserve-macs : Skips MAC address scramble
+#		-pi, --preserve-ips : Skips IP address scramble
+#		-sPIP, --scramble-priv-ips : Scramble RFC 1918 (private) IP addresses
+#		-O=<OUTFILE> : Output file name for log file, which shows the ip/mac address mappings
+#       -sp, --scrub-payload : Intellegently scrambles ARP and L4 data
+#		-np, --nuke-payload : Unintelligently* scrambles all data past TCP/UDP header info [*Not protocol-aware] 
+#
+# Author: Andrew McConnell
+# Date:   03/09/2023
+#############################################################################################
+
 # PCAP Scrubber, improved
 # Using SCAPY
 
